@@ -51,6 +51,7 @@ func runServer(srv lsp.Server) {
 			fmt.Printf("Client %d has died: %s\n", id, err)
 		} else {
 			log.Printf("Server received '%s' from client %d\n", string(payload), id)
+			//fmt.Println("Server received '%s' from client %d\n", string(payload), id)
 			// Echo message back to client.
 			if err := srv.Write(id, payload); err != nil {
 				// Print an error message and continue...

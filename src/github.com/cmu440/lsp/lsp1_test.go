@@ -219,6 +219,13 @@ func TestBasic3(t *testing.T) {
 		runTest(2000)
 }
 
+func TestBasicself(t *testing.T) {
+	newTestSystem(t, 3, makeParams(5, 2000, 2)).
+		setDescription("TestBasic4: Ten clients, long interaction").
+		setNumMsgs(50).
+		runTest(2000)
+}
+
 func TestBasic4(t *testing.T) {
 	newTestSystem(t, 10, makeParams(5, 2000, 2)).
 		setDescription("TestBasic4: Ten clients, long interaction").

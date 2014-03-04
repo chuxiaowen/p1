@@ -67,7 +67,6 @@ type client struct {
 // and port number (i.e., "localhost:9999").
 func NewClient(hostport string, params *Params) (Client, error) {
 	// Create a new client
-	//fmt.Println("create a new client")
 	connid := 0
 
 	receiveseqid := 0
@@ -166,7 +165,6 @@ func (c *client) Read() ([]byte, error) {
 
 func (c *client) Write(payload []byte) error {
 	msg := NewData(c.connid, c.writeseqid, payload)
-	//fmt.Println(msg)
 	c.writeChan <- msg
 	c.writeseqid++
 
@@ -187,7 +185,6 @@ func ClientnetworkHandler(c *client) {
 	for {
 		select {
 		case <-c.shutdown:
-			//fmt.Println("client network exit!")
 			return
 			//break
 
@@ -203,7 +200,6 @@ func ClientnetworkHandler(c *client) {
 				continue
 			}
 
-			//fmt.Println("get data!")
 			c.receiveChan <- &msg
 			if msg.Type == MsgAck && msg.SeqNum > 0 {
 				//fmt.Println("get ack for sequence: ",msg.SeqNum)
@@ -218,9 +214,7 @@ func ClientepochHandler(c *client) {
 	for {
 		select {
 		case <-c.shutdown:
-			//fmt.Println("client epoch exit!")
 			return
-			//break
 
 		default:
 			time.Sleep(d)
@@ -277,12 +271,10 @@ func ClientmasterEvenHandler(c *client) {
 	}
 
 	// when network and application are both stoped
-	//fmt.Println("client exit!")
 	close(c.shutdown)
 	c.closeReplyChan <- nil
 	c.writeReplyChan <- errors.New("connection closed!")
 	c.readChan <- nil
-	//fmt.Println("clinet do close!")
 }
 
 func (c *client) handleReceiveMessage(msg *Message) {
@@ -356,7 +348,6 @@ func (c *client) handleWriteMessage(msg *Message) {
 	if c.networkStopFlag == true {
 		c.writeReplyChan <- errors.New("connection lost!")
 	} else {
-		//fmt.Println("has sent!")
 		c.writeReplyChan <- nil
 	}
 }
@@ -365,14 +356,10 @@ func (c *client) handleEpoch() {
 	c.epochtimes += 1
 
 	// First Judge if exceed epoch limit
-	//fmt.Println(c.connid, c.epochtimes)
-	//fmt.Println("last epoch: ", c.lastepoch)
 	if (c.epochtimes - c.lastepoch) > c.parameter.EpochLimit {
 		// network connection has been lost!
-		//fmt.Println("connection close!")
 		c.networkStopFlag = true
 		c.conn.Close()
-		//fmt.Println("connection lost due to epoch!")
 
 		if c.connid == 0 {
 			c.connectChan <- nil
@@ -387,7 +374,7 @@ func (c *client) handleEpoch() {
 
 			c.conn.Write(p)
 			return //TODO: how to judge connection is closed?
-		} else if c.receiveseqid == 0 {
+		} else if c.receiveseqid == 1 {
 			ack := NewAck(c.connid, 0)
 			p, _ := json.Marshal(ack)
 
@@ -423,7 +410,6 @@ func (c *client) handleEpoch() {
 func (c *client) handleWriteBuffer() {
 	// Read data from buffer until sliding window is full
 	if c.networkStopFlag == true {
-		//fmt.Println("write buffer exist!")
 		return
 	}
 
@@ -437,7 +423,6 @@ func (c *client) handleWriteBuffer() {
 	for c.writeList.Len() > 0 && c.networkStopFlag == false {
 		e := c.writeList.Front()
 		msg := e.Value.(*Message)
-		//fmt.Println("want to write: ", msg.SeqNum)
 		index := msg.SeqNum - c.writePendingNum
 		if index < c.parameter.WindowSize {
 			c.writeList.Remove(e)

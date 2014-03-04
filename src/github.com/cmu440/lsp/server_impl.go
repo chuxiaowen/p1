@@ -82,13 +82,11 @@ func NewServer(port int, params *Params) (Server, error) {
 	server := new(server)
 
 	addr, err := lspnet.ResolveUDPAddr("udp", "localhost:"+strconv.Itoa(port))
-	//fmt.Println(addr)
 	if err != nil {
 		return nil, err
 	}
 
 	conn, err := lspnet.ListenUDP("udp", addr)
-	//fmt.Println(conn)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +139,11 @@ func (s *server) Read() (int, []byte, error) {
 	if msg.SeqNum > 0 {
 		return msg.ConnID, msg.Payload, nil
 	} else {
-		return msg.ConnID, nil, errors.New("read failed!")
+		if s.appStopFlag == true {
+			return 0, nil, errors.New("server closed!")
+		} else {
+			return msg.ConnID, nil, errors.New("read failed!")
+		}
 	}
 }
 
@@ -191,7 +193,6 @@ func ServernetworkHandler(s *server) {
 			}
 
 			data := &netpackage{&msg, addr}
-			//fmt.Println(msg.Type)
 			s.receiveChan <- data
 		}
 	}
@@ -268,12 +269,10 @@ func ServermasterEvenHandler(s *server) {
 		s.handleWriteBuffer()
 	}
 
-	//fmt.Println("server exist")
 	close(s.shutdown)
 	s.readChan <- nil
 	s.writeReplyChan <- errors.New("connection lost!")
 	s.closeAllReplyChan <- errors.New("all connection lost!")
-	//fmt.Println("server do close!")
 }
 
 func (s *server) handleReceiveMessage(pkg *netpackage) {
@@ -323,7 +322,6 @@ func (s *server) handleReceiveMessage(pkg *netpackage) {
 
 			// modify the client map
 			con := newLspConnection(id, addr, s.epochtimes, s.parameter)
-			//fmt.Println("get new connection: ", id)
 			con.lastAck = ack
 			s.connMap[addr.String()] = con
 			s.connidMap[id] = con
@@ -349,7 +347,6 @@ func (s *server) handleReceiveMessage(pkg *netpackage) {
 			//check if we have received before in case of duplicate
 			if !con.ackWindowIndicator[index] {
 				// Insert into readList
-				//fmt.Println("get new data")
 				con.ackWindowIndicator[index] = true
 				con.ackSlidingWindow[index] = msg
 
@@ -366,6 +363,7 @@ func (s *server) handleReceiveMessage(pkg *netpackage) {
 		}
 
 	case MsgAck:
+		con.lastepoch = s.epochtimes
 		number := con.writePendingNum
 
 		// check for there is message need to be acknowledged
@@ -405,25 +403,20 @@ func (s *server) handleEpoch() {
 	s.epochtimes += 1
 
 	for _, con := range s.connMap {
-		//fmt.Println(s.epochtimes)
-		//fmt.Println(con.lastepoch)
+
 		if (s.epochtimes - con.lastepoch) > s.parameter.EpochLimit {
 			con.networkStopFlag = true
-			//fmt.Println("clinet lost, number: ",con.connid)
 
 			//insert a invalid message
 			msg := NewData(con.connid, -1, nil)
-			//fmt.Println("insert invalid message", msg)
 			s.insertReadBuffer(msg)
 
 			s.deleteConnection(con)
 
 			if len(s.connMap) == 0 {
 				s.allnetworkStopFlag = true
-				//fmt.Println("all connection lost from server!")
 				s.conn.Close()
 			}
-			//con.conn.Close()
 
 			continue
 		} else {
@@ -495,7 +488,6 @@ func (s *server) handleWriteBuffer() {
 	if len(s.connMap) == 0 && s.appStopFlag == true {
 		s.allnetworkStopFlag = true
 		s.conn.Close()
-		//fmt.Println("server shut all the network!")
 	}
 
 	for _, con := range s.connMap {
@@ -505,11 +497,9 @@ func (s *server) handleWriteBuffer() {
 		}
 
 		if con.writeList.Len() == 0 && con.writeSlidingWindow[0] == nil {
-			//fmt.Println("send all messages!")
 			if con.appStopFlag == true || s.appStopFlag == true {
 				con.networkStopFlag = true
 				s.deleteConnection(con)
-				//fmt.Println("delete connection: ",con.connid)
 			}
 		}
 
@@ -528,15 +518,6 @@ func (s *server) handleWriteBuffer() {
 				break
 			}
 		}
-
-		/*if con.writeList.Len() == 0  {
-			//fmt.Println("send all messages!")
-			if con.appStopFlag == true || s.appStopFlag == true {
-				con.networkStopFlag = true
-				s.deleteConnection(con)
-				fmt.Println("delete connection: ",con.connid)
-			}
-		}*/
 
 	}
 }
@@ -608,7 +589,7 @@ func (s *server) insertReadBuffer(msg *Message) {
 		if tempmsg.ConnID != id {
 			continue
 		} else {
-			if tempmsg.SeqNum > number {
+			if tempmsg.SeqNum > number && number != -1 {
 				s.readList.InsertBefore(msg, e)
 				success = true
 				break
@@ -618,6 +599,9 @@ func (s *server) insertReadBuffer(msg *Message) {
 
 	if success == false {
 		s.readList.PushBack(msg)
+		if number == -1 {
+			//fmt.Println("insert a invalid message")
+		}
 		success = true
 	}
 }
